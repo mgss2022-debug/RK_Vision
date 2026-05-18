@@ -2,42 +2,49 @@ name: RK Vision Auto Login
 
 on:
   schedule:
-    - cron: '30 3 * * *'   # Runs every day at 9:00 AM IST (3:30 AM UTC)
-  workflow_dispatch:         # Also allows manual run with a button click
+    - cron: '30 3 * * *'   # Every day at 9:00 AM IST (3:30 AM UTC)
+  workflow_dispatch:         # Manual run button
 
 jobs:
   login:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04   # Fixed Ubuntu version — more stable
 
     steps:
 
-      # Step 1 — Download your code from GitHub
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2 — Install Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # Step 3 — Install Chrome + Tesseract on the server
-      - name: Install Chrome and Tesseract
+      - name: Install Chromium and Tesseract
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             chromium-browser \
             chromium-chromedriver \
-            tesseract-ocr
+            tesseract-ocr \
+            libnss3 \
+            libgconf-2-4 \
+            libxss1
 
-      # Step 4 — Install Python libraries
+      - name: Verify Chrome installation
+        run: |
+          chromium-browser --version
+          which chromium-browser
+          which chromedriver
+
       - name: Install Python packages
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # Step 5 — Run your login script
       - name: Run Login Script
         env:
           CGM_USERNAME: ${{ secrets.CGM_USERNAME }}
           CGM_PASSWORD: ${{ secrets.CGM_PASSWORD }}
           CGM_MOBILE:   ${{ secrets.CGM_MOBILE }}
+          WDM_LOG: "0"
         run: python only_login.py
