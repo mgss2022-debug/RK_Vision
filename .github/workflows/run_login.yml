@@ -7,40 +7,44 @@ on:
 
 jobs:
   login:
-    runs-on: ubuntu-22.04   # Fixed Ubuntu version — more stable
+    runs-on: ubuntu-22.04
 
     steps:
 
+      # ── Step 1: Download your code ─────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ── Step 2: Setup Python ───────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Chromium and Tesseract
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            chromium-browser \
-            chromium-chromedriver \
-            tesseract-ocr \
-            libnss3 \
-            libgconf-2-4 \
-            libxss1
+      # ── Step 3: Install Chrome properly (NOT snap) ─────────
+      # This uses official Google Chrome — works perfectly in Actions
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
-      - name: Verify Chrome installation
-        run: |
-          chromium-browser --version
-          which chromium-browser
-          which chromedriver
+      # ── Step 4: Install Tesseract ──────────────────────────
+      - name: Install Tesseract
+        run: sudo apt-get install -y tesseract-ocr
 
+      # ── Step 5: Cache Python packages ─────────────────────
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-
+
+      # ── Step 6: Install Python packages ───────────────────
       - name: Install Python packages
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
+      # ── Step 7: Run your script ────────────────────────────
       - name: Run Login Script
         env:
           CGM_USERNAME: ${{ secrets.CGM_USERNAME }}
