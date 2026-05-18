@@ -3,6 +3,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
 import pytesseract
 from PIL import Image, ImageFilter, ImageEnhance
 import time
@@ -17,7 +19,7 @@ USERNAME = os.environ.get("CGM_USERNAME", "STML3601079810")
 PASSWORD = os.environ.get("CGM_PASSWORD", "Mbk@2009")
 MOBILE   = os.environ.get("CGM_MOBILE",   "9825028693")
 
-# ── Captcha Solver (Pillow only — no cv2/numpy) ─────────────────
+# ── Captcha Solver (Pillow only) ───────────────────────────────
 def solve_captcha(driver):
     try:
         time.sleep(2)
@@ -44,12 +46,9 @@ def solve_captcha(driver):
 
         captcha_img = img.crop((x, y, x + w, y + h))
 
-        # Scale up 3x for better OCR accuracy
         new_w = captcha_img.width * 3
         new_h = captcha_img.height * 3
         captcha_img = captcha_img.resize((new_w, new_h), Image.LANCZOS)
-
-        # Grayscale → contrast → sharpen → threshold → denoise
         captcha_img = captcha_img.convert("L")
         captcha_img = ImageEnhance.Contrast(captcha_img).enhance(2.5)
         captcha_img = captcha_img.filter(ImageFilter.SHARPEN)
@@ -94,33 +93,52 @@ def refresh_captcha(driver):
 def login():
     print("🚀 RK_Vision Starting...")
 
-    # ── Chrome Options for GitHub Actions ─────────────────────
+    # ── Chrome Options ─────────────────────────────────────────
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-extensions")
-    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--allow-running-insecure-content")
+    options.binary_location = "/usr/bin/chromium-browser"
     options.add_experimental_option("prefs", {
         "credentials_enable_service": False,
         "profile.password_manager_enabled": False,
-        "profile.password_manager_leak_detection": False
     })
 
-    # GitHub Actions uses chromedriver directly
-    service = Service("/usr/bin/chromedriver")
-    driver  = webdriver.Chrome(service=service, options=options)
+    # Auto-find correct chromedriver version
+    service = Service(
+        ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()
+    )
+    driver = webdriver.Chrome(service=service, options=options)
+
+    # Set page load timeout to 60 seconds
+    driver.set_page_load_timeout(60)
     driver.set_window_size(1920, 1080)
 
-    driver.get("https://cgmatr.ncode.in/cgm-ilms/login.aspx")
-    print("✅ Portal opened")
+    print("✅ Chrome started")
 
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.ID, "txtLoginUserName"))
-    )
+    try:
+        driver.get("https://cgmatr.ncode.in/cgm-ilms/login.aspx")
+        print("✅ Portal opened")
+    except Exception as e:
+        print(f"❌ Failed to open portal: {e}")
+        driver.quit()
+        return None
+
+    try:
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, "txtLoginUserName"))
+        )
+    except Exception as e:
+        print(f"❌ Login page did not load: {e}")
+        driver.quit()
+        return None
+
     time.sleep(3)
 
     for attempt in range(1, 6):
@@ -172,15 +190,18 @@ def login():
                 print("❌ Still on login page")
 
             driver.get("https://cgmatr.ncode.in/cgm-ilms/login.aspx")
-            WebDriverWait(driver, 15).until(
+            WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located((By.ID, "txtLoginUserName"))
             )
             time.sleep(3)
 
         except Exception as e:
             print(f"⚠️ Unexpected error: {e}")
-            driver.get("https://cgmatr.ncode.in/cgm-ilms/login.aspx")
-            time.sleep(3)
+            try:
+                driver.get("https://cgmatr.ncode.in/cgm-ilms/login.aspx")
+                time.sleep(3)
+            except:
+                pass
 
     print("\n❌ All 5 attempts failed.")
     return None
