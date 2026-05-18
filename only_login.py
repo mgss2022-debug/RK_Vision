@@ -3,8 +3,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.core.os_manager import ChromeType
 import pytesseract
 from PIL import Image, ImageFilter, ImageEnhance
 import time
@@ -23,21 +21,18 @@ MOBILE   = os.environ.get("CGM_MOBILE",   "9825028693")
 def solve_captcha(driver):
     try:
         time.sleep(2)
-
         captcha_info = driver.execute_script("""
             var img = document.getElementById('imgCaptcha');
             if (!img) return null;
             var rect = img.getBoundingClientRect();
             return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
         """)
-
         if not captcha_info or captcha_info['width'] == 0:
             print("⚠️ Captcha not visible")
             return ""
 
         png = driver.get_screenshot_as_png()
         img = Image.open(io.BytesIO(png))
-
         dpr = driver.execute_script("return window.devicePixelRatio || 1;")
         x = int(captcha_info['x'] * dpr)
         y = int(captcha_info['y'] * dpr)
@@ -45,10 +40,7 @@ def solve_captcha(driver):
         h = int(captcha_info['height'] * dpr)
 
         captcha_img = img.crop((x, y, x + w, y + h))
-
-        new_w = captcha_img.width * 3
-        new_h = captcha_img.height * 3
-        captcha_img = captcha_img.resize((new_w, new_h), Image.LANCZOS)
+        captcha_img = captcha_img.resize((captcha_img.width * 3, captcha_img.height * 3), Image.LANCZOS)
         captcha_img = captcha_img.convert("L")
         captcha_img = ImageEnhance.Contrast(captcha_img).enhance(2.5)
         captcha_img = captcha_img.filter(ImageFilter.SHARPEN)
@@ -58,7 +50,6 @@ def solve_captcha(driver):
         config = '--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         result = pytesseract.image_to_string(captcha_img, config=config)
         return result.strip().replace(" ", "").replace("\n", "")
-
     except Exception as e:
         print(f"❌ Captcha error: {e}")
         return ""
@@ -93,7 +84,6 @@ def refresh_captcha(driver):
 def login():
     print("🚀 RK_Vision Starting...")
 
-    # ── Chrome Options ─────────────────────────────────────────
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -103,23 +93,15 @@ def login():
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--allow-running-insecure-content")
-    options.binary_location = "/usr/bin/chromium-browser"
     options.add_experimental_option("prefs", {
         "credentials_enable_service": False,
         "profile.password_manager_enabled": False,
     })
 
-    # Auto-find correct chromedriver version
-    service = Service(
-        ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()
-    )
-    driver = webdriver.Chrome(service=service, options=options)
-
-    # Set page load timeout to 60 seconds
+    # Use chromedriver that matches the installed Chrome
+    driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(60)
     driver.set_window_size(1920, 1080)
-
     print("✅ Chrome started")
 
     try:
@@ -167,7 +149,6 @@ def login():
 
             driver.execute_script("document.getElementById('LoginButton').click();")
             print("✅ Login clicked")
-
             time.sleep(5)
 
             current_url = driver.current_url.lower()
@@ -182,10 +163,7 @@ def login():
                     if (els.length > 0) return els[0].innerText;
                     return '';
                 """)
-                if error_msg:
-                    print(f"❌ Portal error: {error_msg.strip()}")
-                else:
-                    print("❌ Still on login page — captcha may be wrong")
+                print(f"❌ Portal error: {error_msg.strip()}" if error_msg else "❌ Still on login page")
             except:
                 print("❌ Still on login page")
 
